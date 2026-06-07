@@ -23,7 +23,7 @@ def process_and_route(input_file, output_excel, output_folder):
     ws.cell(row=1, column=24).value = "Input_Umbang"        
     ws.cell(row=1, column=25).value = "Input_No Tiang"      
     ws.cell(row=1, column=26).value = "Input_No Tiang Lama" 
-    ws.cell(row=1, column=27).value = "Input_details"       
+    ws.cell(row=1, column=27).value = "Input_details_Summary" 
     
     cable_headers = {}
     for col_idx in range(12, 22):
@@ -65,10 +65,25 @@ def process_and_route(input_file, output_excel, output_folder):
             umbang_val = str(umbang_raw).strip() if umbang_raw is not None else ""
             umbang_block = f"U{umbang_val}" if umbang_val.isdigit() and 1 <= int(umbang_val) <= 9 else None
             
-            col_e = str(ws.cell(row=row, column=5).value).strip() if ws.cell(row=row, column=5).value is not None else ""
-            col_f = str(ws.cell(row=row, column=6).value).strip() if ws.cell(row=row, column=6).value is not None else ""
-            col_g = str(ws.cell(row=row, column=7).value).strip() if ws.cell(row=row, column=7).value is not None else ""
-            details_text = " ".join(filter(None, [col_e, col_f, col_g]))
+            val_160 = ws.cell(row=row, column=5).value
+            qty_bk = 0
+            if val_160 is not None and str(val_160).strip() != "":
+                try: qty_bk = int(float(str(val_160).strip()))
+                except: pass
+                
+            val_400 = ws.cell(row=row, column=6).value
+            qty_bm = 0
+            if val_400 is not None and str(val_400).strip() != "":
+                try: qty_bm = int(float(str(val_400).strip()))
+                except: pass
+                
+            val_srv = ws.cell(row=row, column=7).value
+            srv_text = ""
+            if val_srv is not None and str(val_srv).strip() != "":
+                srv_text = str(val_srv).strip()
+                if srv_text.endswith('.0'): srv_text = srv_text[:-2] 
+                
+            details_summary = f"BK:{qty_bk}, BM:{qty_bm}, Srv:{srv_text}" if (qty_bk>0 or qty_bm>0 or srv_text) else ""
             
             val_h = str(ws.cell(row=row, column=8).value).strip()
             val_i = str(ws.cell(row=row, column=9).value).strip()
@@ -101,8 +116,12 @@ def process_and_route(input_file, output_excel, output_folder):
             pole_data[pole_name_clean] = {
                 'x': x, 'y': y, 'row': row, 
                 'block': block_name, 'umbang': umbang_block,
-                'details': details_text, 'old_pole': old_pole_name,
-                'cable_layer': final_layer_kabel
+                'old_pole': old_pole_name,
+                'cable_layer': final_layer_kabel,
+                'qty_bk': qty_bk,
+                'qty_bm': qty_bm,
+                'srv': srv_text,
+                'summary': details_summary
             }
             pole_list.append(pole_name_clean)
             
@@ -177,7 +196,6 @@ def process_and_route(input_file, output_excel, output_folder):
         clean_area_name = re.sub(r'[\\/*?:"<>|]', "", current_area).strip()
         
         if clean_area_name not in scripts_by_area:
-            # Pake setvar biar aman dari bug Enter di file gabungan
             scripts_by_area[clean_area_name] = [
                 '(setvar "OSMODE" 0)',
                 "(setq firstEnt (entlast))" 
@@ -190,15 +208,114 @@ def process_and_route(input_file, output_excel, output_folder):
         y = data['y']
         block_name = data['block']
         umbang_block = data['umbang']
-        details_text = data['details']
         old_pole_text = data['old_pole']
         cable_layer = data['cable_layer']
         
-        text_x = x + 2
-        y_pole = y + 1
-        y_lama = y
-        y_details = y - 1
+        qty_bk = data['qty_bk']
+        qty_bm = data['qty_bm']
+        srv_val = data['srv']
         
+        # text_x = x + 2.0
+        # y_pole_main = y + 1.5 
+        # y_pole_lama = y + 0.0 
+        
+        # srv_x = x - 1.5
+        # srv_y = y - 1.5
+        
+        # bb_start_y = y - 1.5      
+        # offset_y_bb = 1.2         
+        # offset_x_bb = 2.0         
+        
+        # x_bk = x + 1.5            
+        # x_bm = x_bk + offset_x_bb if qty_bk > 0 else x_bk  
+        
+        # Teks utama (Agak tinggi)
+        text_x = x + 3.0
+        y_pole_main = y + 4.4 
+        
+        # Tiang lama / NA (Persis di bawah teks utama)
+        y_pole_lama = y + 1.5 
+        
+        # Kordinat Service (Kiri Bawah)
+        srv_x = x - 2.8
+        srv_y = y - 3.2
+        
+        # SETUP KOORDINAT BLACKBOX (Kanan Bawah & Deret)
+        bb_start_y = y - 3.2      
+        offset_y_bb = 3.2         
+        offset_x_bb = 5.2         
+        
+        x_bk = x + 3.5            
+        x_bm = x_bk + offset_x_bb if qty_bk > 0 else x_bk
+
+
+        # # 1. Line Routing Kabel
+        # parent = pole_relations.get(pole)
+        # if parent and parent in pole_data:
+        #     x_parent = pole_data[parent]['x']
+        #     y_parent = pole_data[parent]['y']
+        #     cmd_line = f"LINE {x_parent:.3f},{y_parent:.3f} {x:.3f},{y:.3f} "
+        #     ws.cell(row=row, column=22).value = cmd_line
+        #     cmds.append(f'(command "-layer" "m" "{cable_layer}" "")')
+        #     cmds.append(cmd_line)
+            
+        # # 2. Pole Block Utama
+        # cmd_insert = f'(command "-insert" "{block_name}" "{x:.3f},{y:.3f}" 1 1 0)'
+        # ws.cell(row=row, column=23).value = cmd_insert
+        # cmds.append('(command "-layer" "m" "0" "")')
+        # cmds.append(cmd_insert)
+
+        # # 3. Umbang
+        # if umbang_block:
+        #     cmd_umbang = f'(command "-insert" "{umbang_block}" "{x:.3f},{y:.3f}" 1 1 0)'
+        #     ws.cell(row=row, column=24).value = cmd_umbang
+        #     cmds.append('(command "-layer" "m" "UMBANG" "")')
+        #     cmds.append(cmd_umbang)
+        
+        # # 4. Teks Main Pole Name
+        # if pole.upper().startswith("PE "):
+        #     display_label_b = pole
+        # else:
+        #     display_name_match = re.search(r'([A-Z]+\s+\d+.*)$', pole)
+        #     display_label_b = display_name_match.group(1) if display_name_match else pole 
+            
+        # if display_label_b: 
+        #     cmd_text_1 = f"-TEXT {text_x:.3f},{y_pole_main:.3f} 0 {display_label_b}"
+        #     ws.cell(row=row, column=25).value = cmd_text_1
+        #     cmds.append('(command "-layer" "m" "POLE NUMBER" "")')
+        #     cmds.append(cmd_text_1)
+        
+        # # 5. Teks Old Pole / N/A
+        # if old_pole_text: 
+        #     cmd_text_2 = f"-TEXT {text_x:.3f},{y_pole_lama:.3f} 0 {old_pole_text}"
+        #     ws.cell(row=row, column=26).value = cmd_text_2
+        #     cmds.append('(command "-layer" "m" "TIANG LAMA" "")')
+        #     cmds.append(cmd_text_2)
+            
+        # ws.cell(row=row, column=27).value = data['summary']
+        
+        # # 6. INSERT BLOCK SERVICE (JUMLAH SERVIS)
+        # if srv_val:
+        #     block_service = f"S{srv_val}"
+        #     cmd_srv = f'(command "-insert" "{block_service}" "{srv_x:.3f},{srv_y:.3f}" 1 1 0)'
+        #     cmds.append('(command "-layer" "m" "JUMLAH SERVIS" "")')
+        #     cmds.append(cmd_srv)
+            
+        # # 7. INSERT BLOCK BLACKBOX BK 160A (BBOX 160A)
+        # for i in range(qty_bk):
+        #     y_insert = bb_start_y - (i * offset_y_bb)
+        #     cmd_bk = f'(command "-insert" "BK" "{x_bk:.3f},{y_insert:.3f}" 1 1 0)'
+        #     cmds.append('(command "-layer" "m" "BBOX 160A" "")')
+        #     cmds.append(cmd_bk)
+            
+        # # 8. INSERT BLOCK BLACKBOX BM 400A (BBOX 400A)
+        # for i in range(qty_bm):
+        #     y_insert = bb_start_y - (i * offset_y_bb)
+        #     cmd_bm = f'(command "-insert" "BM" "{x_bm:.3f},{y_insert:.3f}" 1 1 0)'
+        #     cmds.append('(command "-layer" "m" "BBOX 400A" "")')
+        #     cmds.append(cmd_bm)
+
+        # 1. Line Routing Kabel
         parent = pole_relations.get(pole)
         if parent and parent in pole_data:
             x_parent = pole_data[parent]['x']
@@ -207,18 +324,28 @@ def process_and_route(input_file, output_excel, output_folder):
             ws.cell(row=row, column=22).value = cmd_line
             cmds.append(f'(command "-layer" "m" "{cable_layer}" "")')
             cmds.append(cmd_line)
+
+        # 6. INSERT BLOCK SERVICE (JUMLAH SERVIS) -> SEKARANG DI SINI (SEBELUM TIANG)
+        if srv_val:
+            block_service = f"S{srv_val}"
+            cmd_srv = f'(command "-insert" "{block_service}" "{srv_x:.3f},{srv_y:.3f}" 1 1 0)'
+            cmds.append('(command "-layer" "m" "JUMLAH SERVIS" "")')
+            cmds.append(cmd_srv)
             
+        # 2. Pole Block Utama
         cmd_insert = f'(command "-insert" "{block_name}" "{x:.3f},{y:.3f}" 1 1 0)'
         ws.cell(row=row, column=23).value = cmd_insert
         cmds.append('(command "-layer" "m" "0" "")')
         cmds.append(cmd_insert)
 
+        # 3. Umbang
         if umbang_block:
             cmd_umbang = f'(command "-insert" "{umbang_block}" "{x:.3f},{y:.3f}" 1 1 0)'
             ws.cell(row=row, column=24).value = cmd_umbang
             cmds.append('(command "-layer" "m" "UMBANG" "")')
             cmds.append(cmd_umbang)
         
+        # 4. Teks Main Pole Name
         if pole.upper().startswith("PE "):
             display_label_b = pole
         else:
@@ -226,22 +353,33 @@ def process_and_route(input_file, output_excel, output_folder):
             display_label_b = display_name_match.group(1) if display_name_match else pole 
             
         if display_label_b: 
-            cmd_text_1 = f"-TEXT {text_x:.3f},{y_pole:.3f} 0 {display_label_b}"
+            cmd_text_1 = f"-TEXT {text_x:.3f},{y_pole_main:.3f} 0 {display_label_b}"
             ws.cell(row=row, column=25).value = cmd_text_1
             cmds.append('(command "-layer" "m" "POLE NUMBER" "")')
             cmds.append(cmd_text_1)
         
+        # 5. Teks Old Pole / N/A
         if old_pole_text: 
-            cmd_text_2 = f"-TEXT {text_x:.3f},{y_lama:.3f} 0 {old_pole_text}"
+            cmd_text_2 = f"-TEXT {text_x:.3f},{y_pole_lama:.3f} 0 {old_pole_text}"
             ws.cell(row=row, column=26).value = cmd_text_2
             cmds.append('(command "-layer" "m" "TIANG LAMA" "")')
             cmds.append(cmd_text_2)
-        
-        if details_text:
-            cmd_details = f"-TEXT {text_x:.3f},{y_details:.3f} 0 {details_text}"
-            ws.cell(row=row, column=27).value = cmd_details
-            cmds.append('(command "-layer" "m" "details" "")')
-            cmds.append(cmd_details)
+            
+        ws.cell(row=row, column=27).value = data['summary']
+            
+        # 7. INSERT BLOCK BLACKBOX BK 160A (BBOX 160A)
+        for i in range(qty_bk):
+            y_insert = bb_start_y - (i * offset_y_bb)
+            cmd_bk = f'(command "-insert" "BK" "{x_bk:.3f},{y_insert:.3f}" 1 1 0)'
+            cmds.append('(command "-layer" "m" "BBOX 160A" "")')
+            cmds.append(cmd_bk)
+            
+        # 8. INSERT BLOCK BLACKBOX BM 400A (BBOX 400A)
+        for i in range(qty_bm):
+            y_insert = bb_start_y - (i * offset_y_bb)
+            cmd_bm = f'(command "-insert" "BM" "{x_bm:.3f},{y_insert:.3f}" 1 1 0)'
+            cmds.append('(command "-layer" "m" "BBOX 400A" "")')
+            cmds.append(cmd_bm)
 
     master_script_lines = []
     
@@ -257,18 +395,16 @@ def process_and_route(input_file, output_excel, output_folder):
         
         file_path = os.path.join(output_folder, f"{area_name}.scr")
         with open(file_path, "w") as scr_file:
-            # Amanin pakai enter di ujung file satuan
             scr_file.write("\n".join(cmds) + "\n")
             
         master_script_lines.extend(cmds)
 
-    # File master dengan handling enter yang rapi
     master_path = os.path.join(output_folder, "00_RUN_ALL.scr")
     with open(master_path, "w") as master_file:
         master_file.write("\n".join(master_script_lines) + "\n")
 
     wb.save(output_excel)
-    print(f"Beres bro! File gabungan 00_RUN_ALL.scr udah kebal error.")
+    print(f"Beres bro! Routing layer untuk Servis, BK, dan BM udah di-update sesuai request.")
 
 # --- EXECUTION ---
 process_and_route("data_input.xlsx", "data_output.xlsx", "output src")

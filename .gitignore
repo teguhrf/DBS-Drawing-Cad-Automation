@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# AutoCAD generated / backup files
+*.bak
+*.dwl
+*.dwl2
+
+# Local environment / IDE configs
+.vscode/
+.idea/
+.gemini/
+.env
+.env.local
+
+# Script Generated Outputs / Work directories
+output src/
+data_output.xlsx
+input.txt
+input.scr
+plot_otomatis.scr
